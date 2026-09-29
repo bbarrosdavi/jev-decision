@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import forks, ledger, policy
+from . import delegate, forks, ledger, policy
 from .engine import JevContextEngine
 
 _sessions: dict[str, dict[str, Any]] = {}
@@ -18,6 +18,8 @@ def _session(session_id: str) -> dict[str, Any]:
         "routed": False,
         "topic": None,
         "completion": None,
+        "route_choice": None,
+        "deleg_hint": False,
     })
 
 
@@ -85,6 +87,7 @@ def on_pre_llm_call(**kwargs: Any):
         state["routed"] = True
         try:
             routed = forks.route_model(state["request"])
+            state["route_choice"] = routed.get("choice")
             ledger.append({
                 "fork": "route_model",
                 "decision": routed.get("choice"),
@@ -105,6 +108,19 @@ def on_pre_llm_call(**kwargs: Any):
             })
         except Exception as exc:
             ledger.append({"fork": "classify", "ok": False, "error": type(exc).__name__})
+    parent_model = str(kwargs.get("model") or "")
+    if (
+        policy.delegation_target(state.get("route_choice"), parent_model)
+        and not state["deleg_hint"]
+        and not state["injected"]
+    ):
+        state["deleg_hint"] = True
+        return {
+            "context": (
+                "Jev routed this turn to gemini-3.8-flash on provider gemini. "
+                "Call jev_delegate with the localized goal. Do not do that subtask on this instance."
+            )
+        }
     if state["injected"]:
         return None
     recent = _recent_tools(kwargs.get("conversation_history"))
@@ -209,6 +225,27 @@ def on_session_end(**kwargs: Any):
 
 
 def register(ctx) -> None:
+    ctx.register_tool(
+        name="jev_delegate",
+        toolset="jev-decision",
+        schema={
+            "name": "jev_delegate",
+            "description": (
+                "Hand a localized subtask to a child instance. Jev picks the child model. "
+                "The current instance keeps its model. Use for lookup, extraction, and a localized change. "
+                "Do not use for architecture or a high-stakes judgment."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "description": "What the child instance must finish."},
+                    "context": {"type": "string", "description": "Facts the child needs. Omit the current transcript."},
+                },
+                "required": ["goal"],
+            },
+        },
+        handler=delegate.handle,
+    )
     ctx.register_hook("pre_tool_call", on_pre_tool_call)
     ctx.register_hook("pre_llm_call", on_pre_llm_call)
     ctx.register_hook("pre_verify", on_pre_verify)

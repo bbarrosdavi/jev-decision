@@ -2,6 +2,9 @@ name: jev-decision
 version: 1.0.0
 description: >-
   TypeSafe Jev beside the Hermes loop: tool gate, router, classify,
-  stuck, verifier, and request-only compaction. Does not swap the chat model.
+  stuck, verifier, request-only compaction, and child instances on the
+  model Jev picks. Does not swap the chat model.
+provides_tools:
+  - jev_delegate
 requires_env:
   - TYPESAFE_API_KEY

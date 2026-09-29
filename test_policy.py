@@ -77,7 +77,13 @@ class DecisionTests(unittest.TestCase):
         self.assertFalse(policy.decide_done(2.0, 0.9, 0.9, False))
         self.assertTrue(policy.decide_done(1.5, 0.6, 0.8, True))
 
-    def test_dispatch_defaults_to_review(self):
+    def test_fast_route_leaves_the_parent_when_it_is_already_flash(self):
+        self.assertIsNone(policy.delegation_target("strong", "grok-4.7"))
+        self.assertIsNone(policy.delegation_target("fast", "gemini-3.8-flash"))
+        self.assertEqual(
+            policy.delegation_target("fast", "grok-4.7"),
+            {"provider": "gemini", "model": "gemini-3.8-flash"},
+        )
         self.assertTrue(policy.force_review("implement", 0.84))
         self.assertFalse(policy.force_review("implement", 0.85))
         self.assertTrue(policy.force_review("review", 0.99))

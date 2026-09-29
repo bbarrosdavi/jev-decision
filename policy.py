@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping, Optional
 
-GATED_TOOLS = frozenset({"terminal", "execute_code", "write_file", "patch", "delegate_task"})
+GATED_TOOLS = frozenset({"terminal", "execute_code", "write_file", "patch", "delegate_task", "jev_delegate"})
 TERMINAL_TOOLS = frozenset({"terminal", "execute_code"})
 
 SAFE_ALLOW = 0.85
@@ -18,6 +18,7 @@ DISPATCH_BAR = 0.85
 HUMAN_SCORE = 0.70
 SHORT_CHARS = 240
 LONG_CHARS = 800
+FAST_ROUTE = {"provider": "gemini", "model": "gemini-3.8-flash"}
 
 _IRREVERSIBLE = re.compile(
     r"""(?ix)
@@ -52,6 +53,8 @@ def preview_of(tool_name: str, args: Mapping[str, Any] | None) -> str:
         return f"path={path}\n{body[:1500]}"
     if tool_name == "delegate_task":
         return str(args.get("tasks") or args)[:2000]
+    if tool_name == "jev_delegate":
+        return str(args.get("goal") or "")[:2000]
     return str(args)[:2000]
 
 
@@ -122,6 +125,16 @@ def clip_original(text: str, band: str, stub: str) -> str:
     if band == "long":
         return text[:LONG_CHARS]
     return text
+
+
+def delegation_target(choice: Any, parent_model: Any) -> Optional[dict]:
+    """Child route for a Jev choice, or None when the work stays on this instance."""
+    if choice != "fast":
+        return None
+    parent = str(parent_model or "").strip()
+    if parent == FAST_ROUTE["model"]:
+        return None
+    return dict(FAST_ROUTE)
 
 
 def force_review(choice: Any, confidence: Any, bar: float = DISPATCH_BAR) -> bool:

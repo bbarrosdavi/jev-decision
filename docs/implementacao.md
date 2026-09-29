@@ -50,7 +50,7 @@ Noul por resultado de tool e por bloco de reasoning. `read_file` usa a pergunta 
 
 ## O que não entra no loop
 
-O router grava `fast`/`strong` e não troca o modelo. Trocar no meio da thread reconstrói o cache. O catálogo de tools fica congelado pela mesma razão. Judge de trace roda em `on_session_end` e só ajusta a barra do dispatch.
+O router grava `fast`/`strong` e não troca o modelo desta instância. `fast`, com o pai fora de `gemini-3.8-flash`, manda o turno chamar `jev_delegate`. Essa tool sobe uma instância filha em `gemini` / `gemini-3.8-flash`. `strong`, ou o pai já nesse modelo, não spawna. O catálogo de tools da instância atual fica congelado.
 
 `read_file` não chama a API.
 
