@@ -21,7 +21,7 @@ def hermes_home() -> Path:
         from hermes_constants import get_hermes_home
         return Path(get_hermes_home())
     except Exception:
-        return Path.home() / ".hermes" / "profiles" / "jev"
+        return Path.home() / ".hermes"
 
 
 def ledger_path() -> Path:

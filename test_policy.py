@@ -62,6 +62,40 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(down["action"], "block")
         self.assertEqual(compose_gate("patch", "gate", {"error": "HTTP 401"})["action"], "block")
 
+    def test_money_and_visibility_ask_for_a_human(self):
+        money = compose_gate("terminal", "gate", {"safe": 0.9, "irreversible": 0.1, "costs_money": 0.8})
+        self.assertEqual(money["action"], "approve")
+        self.assertEqual(money["rule_key"], "jev-escalation")
+
+
+class DecisionTests(unittest.TestCase):
+    def test_uncertainty_is_not_done(self):
+        self.assertFalse(policy.decide_done(2.0, 0.9, 0.27, True))
+        self.assertFalse(policy.decide_done(2.0, 0.9, None, True))
+
+    def test_missing_path_is_not_done(self):
+        self.assertFalse(policy.decide_done(2.0, 0.9, 0.9, False))
+        self.assertTrue(policy.decide_done(1.5, 0.6, 0.8, True))
+
+    def test_dispatch_defaults_to_review(self):
+        self.assertTrue(policy.force_review("implement", 0.84))
+        self.assertFalse(policy.force_review("implement", 0.85))
+        self.assertTrue(policy.force_review("review", 0.99))
+
+    def test_low_grounding_raises_the_bar(self):
+        records = [{"grounded": 0.2}] * 4
+        self.assertEqual(policy.next_dispatch_bar(records, 0.85), 0.90)
+
+    def test_display_band_clips_the_original(self):
+        self.assertEqual(policy.display_band(0.1), "drop")
+        self.assertEqual(policy.display_band(0.9), "full")
+        text = "abcdef"
+        self.assertEqual(policy.clip_original(text, "short", "stub")[:2], "ab")
+
+    def test_credential_path_is_not_read(self):
+        self.assertNotIn(".env", policy.referenced_files("cat .env"))
+        self.assertIsNone(policy.read_bounded(".env"))
+
 
 class HookTests(unittest.TestCase):
     def test_hook_uses_policy_without_network(self):

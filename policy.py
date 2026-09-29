@@ -14,6 +14,10 @@ SAFE_BLOCK = 0.20
 IRREV_BLOCK = 0.70
 STUCK_FIRE = 0.75
 DONE_CONTINUE = 0.45
+DISPATCH_BAR = 0.85
+HUMAN_SCORE = 0.70
+SHORT_CHARS = 240
+LONG_CHARS = 800
 
 _IRREVERSIBLE = re.compile(
     r"""(?ix)
@@ -75,6 +79,107 @@ def path_outside_cwd(path: str) -> bool:
     return False
 
 
+def decide_done(quality: Any, grounded: Any, confidence: Any, paths_ok: bool) -> bool:
+    """Uncertainty does not count as finished. Missing files do not either."""
+    if not paths_ok:
+        return False
+    if confidence is None:
+        return False
+    try:
+        if float(confidence) < 0.5:
+            return False
+        return float(quality) >= 1.2 and float(grounded) >= DONE_CONTINUE
+    except (TypeError, ValueError):
+        return False
+
+
+def paths_exist(paths: list[str] | None) -> bool:
+    if not paths:
+        return True
+    from pathlib import Path
+    for raw in paths:
+        target = Path(raw).expanduser()
+        if not target.exists():
+            return False
+    return True
+
+
+def display_band(score: float) -> str:
+    if score < 0.30:
+        return "drop"
+    if score < 0.55:
+        return "short"
+    if score < 0.80:
+        return "long"
+    return "full"
+
+
+def clip_original(text: str, band: str, stub: str) -> str:
+    if band == "drop":
+        return stub
+    if band == "short":
+        return text[:SHORT_CHARS]
+    if band == "long":
+        return text[:LONG_CHARS]
+    return text
+
+
+def force_review(choice: Any, confidence: Any, bar: float = DISPATCH_BAR) -> bool:
+    if choice == "review" or confidence is None:
+        return True
+    try:
+        return float(confidence) < bar
+    except (TypeError, ValueError):
+        return True
+
+
+def next_dispatch_bar(records: list[Mapping[str, Any]], current: float = DISPATCH_BAR) -> float:
+    grounded = [
+        float(row["grounded"])
+        for row in records[-8:]
+        if isinstance(row.get("grounded"), (int, float))
+    ]
+    if len(grounded) < 4:
+        return current
+    if sum(grounded) / len(grounded) < 0.40:
+        return min(0.95, round(current + 0.05, 2))
+    return current
+
+
+_PATH = re.compile(r"(?:^|[\s'\"=])((?:\./|/)?[A-Za-z0-9_./-]+\.[A-Za-z0-9]{1,8})")
+
+
+def referenced_files(text: str) -> list[str]:
+    found: list[str] = []
+    for match in _PATH.findall(text or ""):
+        if _CREDENTIAL.search(match) or match in found:
+            continue
+        found.append(match)
+        if len(found) == 3:
+            break
+    return found
+
+
+def read_bounded(path: str, limit: int = 1200) -> Optional[str]:
+    if not path or _CREDENTIAL.search(path) or path_outside_cwd(path):
+        return None
+    from pathlib import Path
+    target = Path(path).expanduser()
+    try:
+        if not target.is_file() or target.stat().st_size > 200_000:
+            return None
+        return target.read_text(errors="replace")[:limit]
+    except OSError:
+        return None
+
+
+def _high(value: Any) -> bool:
+    try:
+        return float(value) >= HUMAN_SCORE
+    except (TypeError, ValueError):
+        return False
+
+
 def compose_gate(tool_name: str, code_class: str, jev: Optional[Mapping[str, Any]]) -> Optional[dict]:
     """Return a pre_tool_call directive, or None to allow."""
     if code_class == "skip":
@@ -89,6 +194,12 @@ def compose_gate(tool_name: str, code_class: str, jev: Optional[Mapping[str, Any
         return {
             "action": "block",
             "message": "Jev gate unavailable. Fail closed.",
+        }
+    if _high(jev.get("costs_money")) or _high(jev.get("externally_visible")):
+        return {
+            "action": "approve",
+            "message": "Jev: the call spends money or is visible outside the machine. Human approval required.",
+            "rule_key": "jev-escalation",
         }
     safe = float(jev.get("safe", 0.5))
     irrev = float(jev.get("irreversible", 0.5))

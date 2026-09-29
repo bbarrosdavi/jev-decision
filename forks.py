@@ -13,9 +13,14 @@ def tool_gate(tool_name: str, args: Mapping[str, Any] | None) -> tuple[Optional[
     if code_class != "gate":
         return policy.compose_gate(tool_name, code_class, None), meta
     preview = policy.preview_of(tool_name, args)[:4000]
+    excerpts = {}
+    for path in policy.referenced_files(preview):
+        body = policy.read_bounded(path)
+        if body:
+            excerpts[path] = body
     try:
         payload = client.system_one(
-            {"tool": {"name": tool_name, "preview": preview}},
+            {"tool": {"name": tool_name, "preview": preview}, "files": excerpts},
             {
                 "safe": {
                     "type": "noul",
@@ -32,6 +37,16 @@ def tool_gate(tool_name: str, args: Mapping[str, Any] | None) -> tuple[Optional[
                         "force-pushes, or is visible outside the machine."
                     ),
                 },
+                "costs_money": {
+                    "type": "noul",
+                    "instructions": "The call in `tool.preview` spends money or consumes a paid quota.",
+                },
+                "externally_visible": {
+                    "type": "noul",
+                    "instructions": (
+                        "The call in `tool.preview` publishes, sends, or is visible outside this machine."
+                    ),
+                },
             },
             fork="tool_gate",
         )
@@ -41,6 +56,8 @@ def tool_gate(tool_name: str, args: Mapping[str, Any] | None) -> tuple[Optional[
     jev = {
         "safe": client.noul(payload, "safe"),
         "irreversible": client.noul(payload, "irreversible"),
+        "costs_money": client.noul(payload, "costs_money"),
+        "externally_visible": client.noul(payload, "externally_visible"),
     }
     meta["api"] = True
     meta["jev"] = jev
@@ -107,9 +124,9 @@ def completion(request: str, response: str, changed_paths: list[str]) -> dict:
     try:
         quality = float(graded.get("score"))
     except (TypeError, ValueError):
-        quality = 2.0
-    unsure = confidence is None or float(confidence) < 0.5
-    done = unsure or (quality >= 1.2 and grounded >= 0.45)
+        quality = 0.0
+    paths_ok = policy.paths_exist(changed_paths)
+    done = policy.decide_done(quality, grounded, confidence, paths_ok)
     return {
         "fork": "completion",
         "api": True,
@@ -117,6 +134,7 @@ def completion(request: str, response: str, changed_paths: list[str]) -> dict:
         "quality": quality,
         "grounded": grounded,
         "confidence": confidence,
+        "paths_ok": paths_ok,
         "usage": payload.get("_ledger"),
     }
 
@@ -130,8 +148,12 @@ def score_kept(goal: str, items: list[Mapping[str, Any]]) -> dict:
         str(item["id"]): {
             "type": "noul",
             "instructions": (
-                f"Tool result `{item['id']}` ({item.get('name')}) is still required "
-                "to finish `goal`. A decoy, duplicate listing, or already-used file is not."
+                f"Document `{item['id']}` answers `goal`."
+                if item.get("kind") == "read_file"
+                else (
+                    f"Tool result `{item['id']}` ({item.get('name')}) is still required "
+                    "to finish `goal`. A decoy, duplicate listing, or already-used file is not."
+                )
             ),
         }
         for item in picked
@@ -202,3 +224,54 @@ def score_relevance(query: str, docs: Mapping[str, str]) -> dict:
     )
     scores = {key: client.noul(payload, key) for key in questions}
     return {"fork": "retrieval", "scores": scores, "usage": payload.get("_ledger")}
+
+
+def dispatch_worker(task: str, topic: str | None = None, bar: float = policy.DISPATCH_BAR) -> dict:
+    if topic == "billing":
+        criteria = {
+            "review": "Check the item. Default when the choice is uncertain.",
+            "billing": "Payment, invoice, refund, or subscription work.",
+        }
+    else:
+        criteria = {
+            "review": "Check the work and return findings. Default when the choice is uncertain.",
+            "implement": "Write or change code to meet the goal.",
+            "research": "Collect evidence. Do not edit files.",
+        }
+    payload = client.system_one(
+        {"task": (task or "")[:2000]},
+        {
+            "worker": {
+                "type": "choice",
+                "instructions": "Which worker should take `task`? Uncertain work goes to review.",
+                "criteria": criteria,
+            }
+        },
+        fork="dispatch",
+    )
+    picked = client.choice(payload, "worker")
+    applied = "review" if policy.force_review(picked.get("choice"), picked.get("confidence"), bar) else picked.get("choice")
+    return {
+        "fork": "dispatch",
+        "choice": picked.get("choice"),
+        "confidence": picked.get("confidence"),
+        "applied": applied,
+        "usage": payload.get("_ledger"),
+    }
+
+
+def review_args(args: Mapping[str, Any] | None) -> dict:
+    note = "Dispatch default is review. Do not implement. Return findings against the goal."
+    args = dict(args or {})
+    tasks = args.get("tasks")
+    if isinstance(tasks, list):
+        rewritten = []
+        for task in tasks:
+            if not isinstance(task, dict):
+                rewritten.append(task)
+                continue
+            ctx = str(task.get("context") or "")
+            rewritten.append({**task, "context": f"{note}\n{ctx}".strip()})
+        return {"tasks": rewritten}
+    ctx = str(args.get("context") or "")
+    return {"context": f"{note}\n{ctx}".strip()}
