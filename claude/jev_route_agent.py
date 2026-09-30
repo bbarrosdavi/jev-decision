@@ -2,7 +2,9 @@
 """Claude Code PreToolUse on the Agent tool. Jev picks the cheapest model that can run the subagent.
 
 A subagent starts from its own context, so a cheaper model there pays no cache rebuild (the
-parent keeps its model). The code decides what "requested" means and caps the result; Jev only
+parent keeps its model). Only a subagent that inherits the parent's model is routed: a model named
+in the call or in the agent definition is a choice, and it is kept (a judge must not change model
+behind the author's back). Fable is the one exception, capped at Opus without asking Jev. Jev only
 chooses among cheaper models. Nothing here touches the permission decision.
 """
 
@@ -56,58 +58,63 @@ def parent_model(events: list[dict]) -> Optional[str]:
     return None
 
 
-def requested_model(tool_input: dict, events: list[dict], cwd: str) -> Optional[str]:
-    """The model this subagent would run on without the hook, or None when it is not ours to route."""
+def named_model(tool_input: dict, cwd: str = "") -> Optional[str]:
+    """The model the call or the agent definition names. The router never changes it."""
     explicit = tool_input.get("model")
     if explicit:
         return str(explicit)
+    defined = agent_file_model(str(tool_input.get("subagent_type") or ""), cwd)
+    return defined if defined and defined != "inherit" else None
+
+
+def inherited_model(tool_input: dict, events: list[dict], cwd: str) -> Optional[str]:
+    """The parent's model when the subagent inherits it, or None when it is not ours to route."""
     stype = str(tool_input.get("subagent_type") or "")
     if stype in UNTOUCHED:
         return None
-    defined = agent_file_model(stype, cwd)
-    if defined and defined != "inherit":
-        return defined
-    if stype in INHERITING or defined == "inherit":
+    if stype in INHERITING or agent_file_model(stype, cwd) == "inherit":
         return parent_model(events)
     return None
+
+
+def _rewrite(tool_input: dict, target: str) -> dict:
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {**tool_input, "model": target}}}
 
 
 def decide(data: dict) -> Optional[dict]:
     raw = data.get("tool_input")
     tool_input: dict = raw if isinstance(raw, dict) else {}
-    if str(tool_input.get("subagent_type") or "") == "fork":
+    stype = str(tool_input.get("subagent_type") or "")
+    if stype == "fork":
         return None
-    events = [] if tool_input.get("model") else gate._tail_events(
-        str(data.get("transcript_path") or ""), str(data.get("session_id") or ""),
-    )
-    requested = requested_model(tool_input, events, str(data.get("cwd") or ""))
+    cwd = str(data.get("cwd") or "")
     forks, policy, ledger = gate._plugin()
+    entry = {"fork": "route_subagent", "client": "claude-code", "session": str(data.get("session_id") or ""),
+             "subagent_type": tool_input.get("subagent_type"), "description": str(tool_input.get("description") or "")[:80]}
+    named = named_model(tool_input, cwd)
+    if named is not None:
+        if policy.model_family(named) != "fable":
+            return None
+        ledger.append({**entry, "requested": named, "choice": None, "confidence": None, "applied": "opus",
+                       "reason": "fable_cap", "error": None})
+        return _rewrite(tool_input, "opus")
+    events = gate._tail_events(str(data.get("transcript_path") or ""), str(data.get("session_id") or ""))
+    requested = inherited_model(tool_input, events, cwd)
     family = policy.model_family(requested)
     if family is None or family == "haiku":
         return None
     try:
         picked: dict[str, Any] = forks.route_subagent(
-            str(tool_input.get("description") or ""), str(tool_input.get("prompt") or ""),
-            str(tool_input.get("subagent_type") or ""),
+            str(tool_input.get("description") or ""), str(tool_input.get("prompt") or ""), stype,
         )
     except Exception as exc:
         picked = {"error": type(exc).__name__}
     target = policy.route_subagent(requested, picked.get("choice"), picked.get("confidence"))
-    ledger.append({
-        "fork": "route_subagent",
-        "client": "claude-code",
-        "session": str(data.get("session_id") or ""),
-        "requested": requested,
-        "choice": picked.get("choice"),
-        "confidence": picked.get("confidence"),
-        "applied": target,
-        "subagent_type": tool_input.get("subagent_type"),
-        "description": str(tool_input.get("description") or "")[:80],
-        "error": picked.get("error"),
-    })
+    ledger.append({**entry, "requested": requested, "choice": picked.get("choice"),
+                   "confidence": picked.get("confidence"), "applied": target, "error": picked.get("error")})
     if not target:
         return None
-    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {**tool_input, "model": target}}}
+    return _rewrite(tool_input, target)
 
 
 def main() -> int:

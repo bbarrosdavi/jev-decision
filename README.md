@@ -28,7 +28,7 @@ Uma vez por pedido do usuário, com o histórico grande, o Jev responde duas per
 
 Com `new_topic >= 0.70` e `refers_back <= 0.30`, a compactação pode rodar agora. Pedido com menos de 25 caracteres nunca libera. Sem veredito, o agente segue como sem o plugin.
 
-No Claude Code o Jev também escolhe o modelo dos subagentes. Ele só rebaixa (`opus` → `sonnet` → `haiku`), só com confiança >= 0.70 e nunca põe um subagente em Fable. `fork`, Explore, Plan, `statusline-setup` e `claude-code-guide` ficam intocados. Um `model` explícito na chamada ou na definição do agente vale como teto, não como trava: o Jev ainda pode rebaixar abaixo dele.
+No Claude Code o Jev também escolhe o modelo dos subagentes. Ele só rebaixa (`opus` → `sonnet` → `haiku`), só com confiança >= 0.70 e nunca põe um subagente em Fable. Só é roteado o subagente que herda o modelo da conversa principal. Um `model` na chamada ou na definição do agente é mantido e o Jev nem é consultado; a única exceção é Fable, que vira Opus. `fork`, Explore, Plan, `statusline-setup` e `claude-code-guide` ficam intocados.
 
 Cliente: `POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`. A chave fica em `TYPESAFE_API_KEY`. O ledger reescreve strings no formato `apikey_` e `sk-` antes de gravar. Cada chamada custa ~500 tokens de input e ~500 ms.
 
@@ -65,7 +65,7 @@ Hooks e engine valem no próximo processo do perfil. Reinicie o Desktop e o gate
 |---|---|---|
 | `UserPromptSubmit` | `jev_compact_gate.py` | Com contexto a partir de 150 mil, pergunta ao Jev se o pedido abre outra tarefa. Grava o veredito. |
 | `PreCompact` (`auto`) | `jev_compact_gate.py` | Com `autoCompactWindow` em 200 mil, o Claude Code propõe compactar cedo. Só passa com veredito de assunto novo ou contexto em 900 mil ou mais. |
-| `PreToolUse` (`Agent\|Task`) | `jev_route_agent.py` | Reescreve o `model` do subagente via `updatedInput` quando o Jev escolhe um mais barato. |
+| `PreToolUse` (`Agent\|Task`) | `jev_route_agent.py` | Em subagente que herda o modelo, reescreve o `model` via `updatedInput` quando o Jev escolhe um mais barato. |
 
 ### Instalar
 

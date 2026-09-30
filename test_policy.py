@@ -442,6 +442,7 @@ class ClaudeRouteTests(unittest.TestCase):
         (Path(self.home.name) / "agents").mkdir()
         (Path(self.home.name) / "agents" / "dispatcher.md").write_text("---\nname: dispatcher\nmodel: haiku\n---\nbody\n")
         (Path(self.home.name) / "agents" / "thinker.md").write_text("---\nname: thinker\nmodel: inherit\n---\nbody\n")
+        (Path(self.home.name) / "agents" / "judge.md").write_text("---\nname: judge\nmodel: opus\n---\nbody\n")
         path = Path(__file__).resolve().parent / "claude" / "jev_route_agent.py"
         spec = importlib.util.spec_from_file_location("jev_route_agent_under_test", path)
         self.route = importlib.util.module_from_spec(spec)
@@ -472,8 +473,15 @@ class ClaudeRouteTests(unittest.TestCase):
         self.calls = call.call_count
         return out
 
-    def test_explicit_opus_goes_to_haiku_on_a_confident_lookup(self):
-        out = self._call({"description": "find def", "prompt": "Find where X is defined", "model": "opus"},
+    def test_named_model_is_kept_without_asking_jev(self):
+        for tool_input in ({"description": "judge batch", "prompt": "Judge relevance", "model": "opus"},
+                           {"description": "judge batch", "prompt": "Judge relevance", "model": "sonnet"},
+                           {"description": "judge batch", "prompt": "Judge relevance", "subagent_type": "judge"}):
+            self.assertIsNone(self._call(tool_input, pick={"choice": "haiku", "confidence": 1.0}))
+            self.assertEqual(self.calls, 0)
+
+    def test_inherited_opus_goes_to_haiku_on_a_confident_lookup(self):
+        out = self._call({"description": "find def", "prompt": "Find where X is defined"},
                          pick={"choice": "haiku", "confidence": 0.9})
         self.assertEqual(out["hookSpecificOutput"]["updatedInput"]["model"], "haiku")
         self.assertEqual(out["hookSpecificOutput"]["updatedInput"]["prompt"], "Find where X is defined")
@@ -486,7 +494,7 @@ class ClaudeRouteTests(unittest.TestCase):
         self.assertIsNone(self._call({"description": "d", "prompt": "p"}, parent="claude-haiku-4-5"))
 
     def test_low_confidence_or_own_model_leaves_the_call(self):
-        self.assertIsNone(self._call({"description": "d", "prompt": "p", "model": "opus"},
+        self.assertIsNone(self._call({"description": "d", "prompt": "p"},
                                      pick={"choice": "haiku", "confidence": 0.4}))
         self.assertIsNone(self._call({"description": "d", "prompt": "p", "subagent_type": "dispatcher"}))
         self.assertIsNone(self._call({"description": "d", "prompt": "p", "subagent_type": "Explore"}))
@@ -499,6 +507,9 @@ class ClaudeRouteTests(unittest.TestCase):
         with mock.patch.object(self.forks, "route_subagent", side_effect=RuntimeError("down")):
             out = self.route.decide({"hook_event_name": "PreToolUse", "tool_name": "Agent", "session_id": "r2",
                                      "tool_input": {"description": "d", "prompt": "p", "model": "fable"}})
+        self.assertEqual(out["hookSpecificOutput"]["updatedInput"]["model"], "opus")
+        out = self._call({"description": "d", "prompt": "p"}, parent="claude-fable-5-1",
+                         pick={"choice": "fable", "confidence": 1.0})
         self.assertEqual(out["hookSpecificOutput"]["updatedInput"]["model"], "opus")
 
 
