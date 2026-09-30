@@ -88,7 +88,7 @@ Linha de base: Claude Code com contexto médio de 379 mil e 70% das requisiçõe
 
 ## Métricas
 
-Medições de 29/09/2026. Detalhes, custos por turno e método em [`docs/economia-de-tokens-2026-09-29.md`](docs/economia-de-tokens-2026-09-29.md).
+Medições da configuração atual: gatilho do Hermes em 100 mil, janela do Claude Code em 200 mil, gate em 900 mil, roteador com confiança >= 0.70. Método e detalhes em [`docs/economia-de-tokens-2026-09-29.md`](docs/economia-de-tokens-2026-09-29.md).
 
 ### Compactação por troca de assunto
 
@@ -96,88 +96,29 @@ Medições de 29/09/2026. Detalhes, custos por turno e método em [`docs/economi
 
 | Onde | Método | Resultado |
 |---|---|---|
-| Claude Code, 59 transcripts, 7.853 requisições | simulação com o fork real | releitura −24,9%, custo líquido −24,1% |
-| Hermes, 34 sessões reais, 8.269 chamadas | simulação com o fork real | releitura −13,6%, custo líquido −12,4% |
-| Hermes ao vivo, dois turnos, n=2 | `jev` × `plain`, mesmo modelo | turno após a troca: custo −58%, releitura −81%, notas iguais |
-| Claude Code ao vivo, Haiku headless | três turnos na mesma sessão | bloqueou no pedido dependente, compactou no pedido novo, contexto de 137 mil para 22 mil |
-
-Janela do gatilho, custo líquido simulado:
-
-| Gatilho | Hermes | Claude Code |
-|---|---:|---:|
-| 200 mil | | 24,1% |
-| 150 mil | 12,4% | 24,6% |
-| 120 mil | 12,9% | 24,4% |
-| 100 mil | 13,1% | |
-| 80 mil | 14,8% | |
-
-O Hermes usa 100 mil e o Claude Code 200 mil.
+| Claude Code, 59 transcripts, 7.853 requisições | simulação com o fork atual | releitura −24,9%, custo líquido −24,1% |
+| Hermes, 34 sessões reais, 8.269 chamadas | simulação com o fork atual | custo líquido −13,1% |
+| Claude Code ao vivo | três turnos na mesma sessão | bloqueou no pedido dependente, compactou no pedido novo, contexto de 137 mil para 22 mil |
+| Hermes ao vivo, depois da revisão do engine | turno após a troca de assunto | compactou de 434 mil para 12 mil caracteres; US$ 0,064 contra 0,165 |
 
 ### Qualidade depois de compactar
 
-Teste A → B → A: o turno 1 lê documentos longos, o turno 2 é uma tarefa sem relação (o gatilho compacta), o turno 3 pede um detalhe exato do turno 1, conferido por oráculo.
+Teste A → B → A: o turno 1 lê documentos longos, o turno 2 é uma tarefa sem relação (o gatilho compacta), o turno 3 pede um detalhe exato do turno 1, conferido por oráculo. 9 de 9 voltas corretas, inclusive com o detalhe só na conversa e enterrado antes de ~90 mil tokens de leitura.
 
-| Cenário | Resultado |
-|---|---|
-| Hermes, detalhe que está em arquivo, n=2 | corretos; o `jev` releu os arquivos e custou US$ 0,046 e 0,015 contra 0,123 e 0,134 |
-| Hermes, detalhe só na conversa, avisado, no início ou no meio, n=4 | corretos |
-| Hermes, detalhe só na conversa, enterrado antes de ~90 mil tokens de leitura, n=2 | corretos; o valor ficou no resumo |
-| Claude Code, Opus, token impresso antes de ~137 mil tokens de texto | correto |
-
-9 de 9 voltas ao assunto antigo corretas.
+Projeto de quatro turnos no Hermes (construir um avaliador de planilha, estender, tarefa sem relação, voltar à planilha), suíte oculta de 68 verificações: `jev` 68/68, `plain` 67/68. Na volta ao projeto, o `jev` leu 59 mil de cache por chamada contra 131 mil.
 
 ### Roteamento de subagentes (Claude Code)
 
 | Medição | Resultado |
 |---|---|
-| Uso de subagentes em 59 sessões | 95 chamadas, 92 em Opus, 7,5% do custo ponderado |
-| Réplica das 95 chamadas | 10 rebaixadas para Haiku (lotes de geração de consultas, confiança 0,90 a 0,93); revisões e resumos mantidos |
-| Ao vivo, pai Opus, `lookup`, `extract`, `count` | 3/3 corretos nos dois braços; custo −39%, −43%, −34% |
-| Ao vivo, revisão de código | Opus mantido nos dois braços |
-
-### Projeto complexo, quatro turnos
-
-Construir um avaliador de planilha, estender, uma tarefa sem relação, voltar à planilha. Nota por suíte oculta de 68 verificações.
-
-| Braço | Custo | Suíte oculta |
-|---|---:|---:|
-| Claude Code + Jev, Opus | US$ 8,10 | 68/68 |
-| Claude Code puro, Opus | US$ 7,33 | 68/68 |
-| Hermes `jev`, gatilho em 150 mil | US$ 1,131 | 68/68 |
-| Hermes `plain` | US$ 1,186 | 68/68 |
-| Hermes `jev`, gatilho em 100 mil | turnos 3+4: US$ 0,381 | 68/68 |
-| Hermes `plain` | turnos 3+4: US$ 0,388 | 67/68 |
-
-Num projeto de um assunto só, que cabe na janela, a camada fica fora do caminho. A diferença de US$ 0,77 no Claude Code é variação do Opus: nenhum hook agiu. Depois da compactação, o turno de volta leu 59 mil de cache por chamada contra 131 mil.
-
-### Suíte de cinco tarefas, Hermes, Gemini 3.8 Flash
-
-| Tarefa | Nota | `jev` | `plain` |
-|---|---|---:|---:|
-| recon | os dois passaram | US$ 0,314, 31 chamadas | US$ 0,239, 17 chamadas |
-| span | os dois passaram | US$ 0,192, 56 s | US$ 0,145, 417 s |
-| gate | `add` correto nos dois | canário sobreviveu, US$ 0,250 | canário apagado, US$ 0,018 |
-| spec | os dois passaram | US$ 0,096 | US$ 0,048 |
-| repair | os dois passaram | US$ 0,035 | US$ 0,035 |
-
-Essa suíte rodou com o desenho original (verificador que forçava turnos e compactação por request), que gastava mais do que economizava. Total: `jev` US$ 0,887 contra `plain` US$ 0,485. Esses caminhos foram corrigidos ou descartados. O canário do `gate` sobreviveu porque o agente leu a nota da tarefa, não por bloqueio do gate. Em tarefa curta, sem troca de assunto, a camada não economiza.
-
-Primeira comparação, tarefa `reconcile` com 58 linhas de ledger: total de tokens −38,3%, custo Gemini −18,2%, mesma nota. n=1.
-
-### Medido e descartado
-
-| Alavanca | Medição |
-|---|---|
-| Filtrar saída de tool no Claude Code | cortaria 1,1%, e os blocos cortados tinham identificadores usados depois |
-| Compactação por request no Hermes | total de tokens −24%, custo +3%: cada corte quebra o prefix cache |
-| Pré-busca de leitura previsível | 1,5% das requisições no Claude Code, 5% no Hermes |
-| Detector de ciclo | 1,1% das chamadas repetem numa janela de 6 |
+| Pai Opus, tarefas mecânicas delegadas (`lookup`, `extract`, `count`) | 3/3 corretos nos dois braços; custo −39%, −43%, −34% |
+| Revisão de código delegada | Opus mantido |
 
 ### Limitações
 
-- Precisão do veredito: no Claude Code, uns 3 de 16 disparos eram continuação. O custo do erro é uma compactação antecipada e alguma releitura. O resumo nativo mantém o fio.
+- Precisão do veredito: no Claude Code, uns 3 de 16 disparos eram continuação. O custo do erro é uma compactação antecipada e alguma releitura.
 - Os testes ao vivo são n=1 ou n=2. As porcentagens não são taxa estável.
-- A economia depende de sessões longas depois de uma troca de assunto. Em trabalho contínuo sobre um tema só, a camada não tem o que fazer.
+- A economia depende de sessões longas depois de uma troca de assunto. Em trabalho contínuo sobre um tema só, a camada não age e a compactação acontece no teto nativo.
 
 ## Testes
 
@@ -191,8 +132,6 @@ Sem rede. Os testes dos hooks do Hermes precisam do pacote do Hermes no path.
 
 - [Implementação](docs/implementacao.md)
 - [Economia de tokens, 2026-09-29](docs/economia-de-tokens-2026-09-29.md)
-- [Suíte de cinco tarefas](docs/resultados-suite.md)
-- [Primeira comparação](docs/resultados-2026-09-29.md)
 
 ## Licença
 
