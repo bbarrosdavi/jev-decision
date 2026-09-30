@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/davi/Projetos/hermes-jev-decision/claude/jev_compact_gate.py",
+            "command": "python3 /home/davi/Projetos/jev-decision/claude/jev_compact_gate.py",
             "timeout": 30
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/davi/Projetos/hermes-jev-decision/claude/jev_route_agent.py",
+            "command": "python3 /home/davi/Projetos/jev-decision/claude/jev_route_agent.py",
             "timeout": 30
           }
         ]
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/davi/Projetos/hermes-jev-decision/claude/jev_compact_gate.py",
+            "command": "python3 /home/davi/Projetos/jev-decision/claude/jev_compact_gate.py",
             "timeout": 30
           }
         ]

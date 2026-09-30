@@ -2,8 +2,8 @@
 """Month review of the Jev layer, from Claude Code transcripts, Hermes state.db and both ledgers.
 
 Runs from any directory. With no arguments: the last 30 days against the frozen baseline.
-  python3 ~/Projetos/hermes-jev-decision/tools/jev_report.py
-  python3 ~/Projetos/hermes-jev-decision/tools/jev_report.py --since 2026-10-01 --until 2026-11-01
+  python3 ~/Projetos/jev-decision/tools/jev_report.py
+  python3 ~/Projetos/jev-decision/tools/jev_report.py --since 2026-10-01 --until 2026-11-01
 The baseline was taken before activation (Claude Code deletes transcripts older than 30 days):
   python3 tools/jev_report.py --since 2026-08-30 --until 2026-09-29 --no-baseline --save docs/baseline-2026-09.json
 

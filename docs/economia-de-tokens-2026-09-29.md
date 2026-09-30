@@ -132,7 +132,7 @@ Depois da correção, a verificação ao vivo compactou de 434 mil para 12 mil c
 Verificação mensal: `docs/baseline-2026-09.json` congela 30/08 a 28/09, antes do Jev (Claude Code apaga transcripts com mais de 30 dias). Um mês depois:
 
 ```bash
-python3 ~/Projetos/hermes-jev-decision/tools/jev_report.py --since 2026-10-01 --until 2026-11-01
+python3 ~/Projetos/jev-decision/tools/jev_report.py --since 2026-10-01 --until 2026-11-01
 ```
 
 Roda de qualquer diretório. Sem argumentos, compara os últimos 30 dias com a linha de base.
