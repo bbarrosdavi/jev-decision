@@ -14,6 +14,8 @@ from . import ledger
 ENDPOINT = "https://api.typesafe.ai/v1/systemone"
 MODEL = "jev-latest"
 TIMEOUT_S = 8.0
+RETRIES = 1
+RETRY_WAIT_S = 0.5
 
 
 class JevError(RuntimeError):
@@ -41,30 +43,43 @@ def system_one(state: Any, questions: Mapping[str, Any], *, fork: str) -> dict:
         },
     )
     started = time.perf_counter()
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-            status = getattr(resp, "status", 200)
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:400]
-        elapsed_ms = int((time.perf_counter() - started) * 1000)
-        ledger.append({
-            "fork": fork,
-            "ok": False,
-            "status": exc.code,
-            "latency_ms": elapsed_ms,
-            "error": detail,
-        })
-        raise JevError(f"HTTP {exc.code}") from exc
-    except Exception as exc:
-        elapsed_ms = int((time.perf_counter() - started) * 1000)
-        ledger.append({
-            "fork": fork,
-            "ok": False,
-            "latency_ms": elapsed_ms,
-            "error": type(exc).__name__,
-        })
-        raise JevError(type(exc).__name__) from exc
+    attempt = 0
+    while True:
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+                status = getattr(resp, "status", 200)
+            break
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:400]
+            # A rate limit or a server error is worth one more try. A bad request or key is not.
+            if attempt < RETRIES and (exc.code == 429 or exc.code >= 500):
+                attempt += 1
+                time.sleep(RETRY_WAIT_S)
+                continue
+            ledger.append({
+                "fork": fork,
+                "ok": False,
+                "status": exc.code,
+                "latency_ms": int((time.perf_counter() - started) * 1000),
+                "attempts": attempt + 1,
+                "error": detail,
+            })
+            raise JevError(f"HTTP {exc.code}") from exc
+        except Exception as exc:
+            # Wi-Fi roaming and read timeouts are transient. One retry, then fail.
+            if attempt < RETRIES and isinstance(exc, (urllib.error.URLError, TimeoutError, ConnectionError, OSError)):
+                attempt += 1
+                time.sleep(RETRY_WAIT_S)
+                continue
+            ledger.append({
+                "fork": fork,
+                "ok": False,
+                "latency_ms": int((time.perf_counter() - started) * 1000),
+                "attempts": attempt + 1,
+                "error": type(exc).__name__,
+            })
+            raise JevError(type(exc).__name__) from exc
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     usage = payload.get("usage") or {}

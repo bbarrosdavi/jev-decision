@@ -41,9 +41,10 @@ def handle(args: dict, parent_agent: Any = None, **_kwargs: Any) -> str:
     if parent_agent is None:
         return json.dumps({"error": "no parent instance"})
     parent_model = str(getattr(parent_agent, "model", "") or "")
+    parent_provider = str(getattr(parent_agent, "provider", "") or "")
     routed = forks.route_model(goal)
     choice = routed.get("choice")
-    target = policy.delegation_target(choice, parent_model)
+    target = policy.delegation_target(choice, parent_model, parent_provider)
     if target is None:
         return json.dumps({
             "delegated": False,

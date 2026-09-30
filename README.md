@@ -11,9 +11,11 @@ Este plugin não é o `jev-typesafe` do catálogo. Aquele expõe tools (`jev_che
 | Hook | Função |
 |---|---|
 | `pre_tool_call` | Gate de `terminal`, `execute_code`, `write_file`, `patch`, `delegate_task`. O resto não chama a API. |
-| `pre_llm_call` | Router e classify no primeiro turno, só no ledger. Stuck, se disparar, anexa um contexto na mensagem do usuário. Não mexe no system prompt. |
-| `pre_verify` | Um nudge de continuação. `attempt > 0` não chama de novo. |
-| context engine | Compactação só no request. O que fica, fica verbatim. Resultado de tool descartado vira stub. |
+| `transform_tool_result` | Stuck a cada chamada de tool. O aviso vai no resultado mais novo. |
+| `post_tool_call` | Observa corridas de teste para o verificador. |
+| `pre_llm_call` | Router e classify numa chamada, no primeiro turno. Troca de assunto, uma vez por pedido. |
+| `pre_verify` | Continua só com evidência: teste falhou, path ausente, ou o Jev confiante de que falta algo. |
+| context engine | O compressor nativo, com um gatilho: compacta cedo quando o pedido novo abre outra tarefa. |
 
 O router não troca o modelo do chat. Não há hook que faça isso sem invalidar o prefix cache.
 
@@ -37,9 +39,30 @@ hermes config set context.engine jev-decision
 
 Hooks e engine valem no próximo processo desse perfil.
 
+### Claude Code
+
+`claude/` usa o mesmo `forks` e `policy`. O bloco exato vai em `~/.claude/settings.json` e está versionado em [`claude/settings.hooks.json`](claude/settings.hooks.json):
+
+| Hook | Script | Função |
+|---|---|---|
+| `UserPromptSubmit` | `jev_compact_gate.py` | Com contexto grande, pergunta ao Jev se o pedido abre outra tarefa. Grava o veredito. |
+| `PreCompact` (`auto`) | `jev_compact_gate.py` | Com `autoCompactWindow` em 200 mil, o Claude Code propõe compactar cedo. Só passa com veredito de assunto novo ou contexto em 900 mil ou mais. |
+| `PreToolUse` (`Agent\|Task`) | `jev_route_agent.py` | O Jev pode trocar o modelo do subagente por um mais barato. Nunca promove, nunca Fable. |
+
+A chave vem de `TYPESAFE_API_KEY` ou de `~/.hermes/.env`. Estado e ledger em `~/.claude/jev/`. `JEV_OFF=1` desliga os dois scripts.
+
+### Relatório mensal
+
+```bash
+python3 ~/Projetos/hermes-jev-decision/tools/jev_report.py
+```
+
+Sem argumentos: os últimos 30 dias contra a linha de base congelada (`docs/baseline-2026-09.json`, 30/08 a 28/09, antes do Jev). `--since`/`--until` escolhem outro período.
+
 ## Documentação
 
 - [Implementação](docs/implementacao.md)
+- [Economia de tokens, 2026-09-29](docs/economia-de-tokens-2026-09-29.md): medições, qualidade, projeto complexo, roteamento
 - [Primeira comparação, 2026-09-29](docs/resultados-2026-09-29.md)
 
 ## Licença

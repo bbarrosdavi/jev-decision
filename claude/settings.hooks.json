@@ -1,0 +1,40 @@
+{
+  "autoCompactWindow": 200000,
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/davi/Projetos/hermes-jev-decision/claude/jev_compact_gate.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/davi/Projetos/hermes-jev-decision/claude/jev_route_agent.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/davi/Projetos/hermes-jev-decision/claude/jev_compact_gate.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

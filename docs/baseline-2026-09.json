@@ -1,0 +1,59 @@
+{
+ "since": "2026-08-30",
+ "until": "2026-09-29",
+ "claude": {
+  "sessions": 82,
+  "requests": 15307,
+  "avg_context": 379294,
+  "share_over_200k": 0.703,
+  "input_eq_per_request": 47427,
+  "output_per_request": 1331,
+  "compactions": 19,
+  "subagents": 109,
+  "subagents_by_model": {
+   "haiku": 0,
+   "sonnet": 2,
+   "opus": 101,
+   "fable": 5,
+   "other": 1
+  },
+  "jev": {
+   "topic_verdicts": 0,
+   "topic_new": 0,
+   "compact_allowed_new_topic": 0,
+   "compact_allowed_near_limit": 0,
+   "compact_blocked_prompts": 0,
+   "compactions_measured": 0,
+   "reread_tokens_avoided": 0,
+   "net_input_eq_saved": 0,
+   "subagents_routed": 0,
+   "routing_input_eq_saved": 0,
+   "api_errors": 0
+  }
+ },
+ "hermes": {
+  "sessions": 98,
+  "calls": 8925,
+  "cost_usd": 86.95,
+  "cost_per_call": 0.00974,
+  "cache_read_per_call": 176162,
+  "input_per_call": 8927,
+  "output_per_call": 391,
+  "sessions_with_compaction": 12,
+  "jev": {
+   "topic_verdicts": 0,
+   "topic_new": 0,
+   "compactions": 0,
+   "no_progress": 0,
+   "compactions_measured": 0,
+   "reread_tokens_avoided": 0,
+   "gate_allow": 0,
+   "gate_approve": 0,
+   "gate_block": 0,
+   "stuck_nudges": 0,
+   "verify_continue": 0,
+   "verify_accept": 0,
+   "api_errors": 0
+  }
+ }
+}

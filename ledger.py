@@ -6,6 +6,7 @@ import json
 import os
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -45,7 +46,8 @@ def redact(value: Any) -> Any:
 
 
 def append(record: Mapping[str, Any]) -> None:
-    line = json.dumps(redact(dict(record)), ensure_ascii=False, separators=(",", ":"))
+    row = {"ts": round(time.time(), 3), **dict(record)}
+    line = json.dumps(redact(row), ensure_ascii=False, separators=(",", ":"))
     with _LOCK:
         with ledger_path().open("a", encoding="utf-8") as fh:
             fh.write(line + "\n")

@@ -80,12 +80,12 @@ def main() -> int:
         rows.append(_row(label, started, usage, f"action={action} safe={meta.get('jev')}"))
 
     started = time.perf_counter()
-    verdict = forks.stuck("fix the test", [{"name": "terminal", "result": "error"}] * 4)
-    rows.append(_row("stuck", started, verdict.get("usage"), f"stuck={verdict.get('stuck')} p={verdict.get('p')}"))
+    verdict = forks.stuck("fix the test", [{"tool": "terminal", "args": "pytest", "result": "1 failed"}] * 5)
+    rows.append(_row("stuck", started, verdict.get("usage"), f"stuck={verdict.get('stuck')} repeating={verdict.get('repeating')}"))
 
     started = time.perf_counter()
     verdict = forks.completion("add a function", "I added it.", ["forks.py"])
-    rows.append(_row("completion", started, verdict.get("usage"), f"done={verdict.get('done')} p={verdict.get('p')}"))
+    rows.append(_row("completion", started, verdict.get("usage"), f"done={verdict.get('done')} conf={verdict.get('confidence')}"))
 
     started = time.perf_counter()
     routed = forks.route_model("rename one local variable in policy.py")
